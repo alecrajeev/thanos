@@ -67,6 +67,7 @@ type Endpoint struct {
 	Address          string `json:"address"`
 	CapNProtoAddress string `json:"capnproto_address"`
 	AZ               string `json:"az"`
+	PreferSameZone   bool   `json:"prefer_same_zone,omitempty"`
 }
 
 func (e *Endpoint) String() string {
