@@ -1,0 +1,14 @@
+FROM quay.io/prometheus/busybox:latest
+
+RUN adduser \
+    -D `#Dont assign a password` \
+    -H `#Dont create home directory` \
+    -u 1001 `#User id`\
+    thanos
+
+COPY --chown=thanos .build/linux-arm64/thanos /bin/thanos
+
+ADD --chown=thanos:thanos files/init-script.sh /usr/bin/local/init-script.sh
+
+USER 1001
+ENTRYPOINT [ "/bin/thanos" ]
