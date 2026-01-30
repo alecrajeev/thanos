@@ -242,7 +242,7 @@ docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCK
 docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
-	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)-linux-$*"
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)-linux-$*"
 
 .PHONY: docs
