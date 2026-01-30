@@ -202,6 +202,7 @@ func sizeOfLeastOccupiedAZ(azSpread map[string]int64) int64 {
 // ensuring that replicas for each ring section are owned by different endpoints.
 func calculateSectionReplicas(ringSections sections, replicationFactor uint64, availabilityZones map[string]struct{}) {
 
+	fmt.Println("start calculateSectionReplicas")
 	for i, s := range ringSections {
 		replicas := make(map[uint64]struct{})
 		azSpread := make(map[string]int64)
@@ -217,6 +218,7 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 			if _, ok := replicas[rep.endpointIndex]; ok {
 				continue
 			}
+			fmt.Println("start check if preferSameZone")
 			if s.preferSameZone {
 				// prefer replicas to be in the same availability zone
 				if s.az != rep.az {
@@ -228,11 +230,16 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 					continue
 				}
 			}
+			fmt.Println("finish check if preferSameZone")
+			fmt.Println("replicas start")
+			fmt.Println(rep.replicas)
+			fmt.Println("replicas finish")
 			replicas[rep.endpointIndex] = struct{}{}
 			azSpread[rep.az]++
 			s.replicas = append(s.replicas, rep.endpointIndex)
 		}
 	}
+	fmt.Println("finish calculateSectionReplicas")
 }
 
 func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {

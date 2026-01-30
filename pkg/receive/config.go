@@ -114,6 +114,7 @@ func (e *Endpoint) unmarshal(data []byte) error {
 	e.Address = configEndpoint.Address
 	e.AZ = configEndpoint.AZ
 	e.CapNProtoAddress = configEndpoint.CapNProtoAddress
+	e.PreferSameZone = configEndpoint.PreferSameZone
 	return nil
 }
 
