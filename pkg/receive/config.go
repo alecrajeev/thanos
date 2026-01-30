@@ -71,7 +71,7 @@ type Endpoint struct {
 }
 
 func (e *Endpoint) String() string {
-	return fmt.Sprintf("addr: %s, capnp_addr: %s, az: %s", e.Address, e.CapNProtoAddress, e.AZ)
+	return fmt.Sprintf("addr: %s, capnp_addr: %s, az: %s", e.Address, e.CapNProtoAddress, e.AZ, e.PreferSameZone)
 }
 
 func (e *Endpoint) HasAddress(addr string) bool {
