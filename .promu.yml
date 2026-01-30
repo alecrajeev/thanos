@@ -19,4 +19,4 @@ build:
     -X github.com/prometheus/common/version.BuildDate={{date "20060102-15:04:05"}}
 crossbuild:
   platforms:
-    - linux/arm64
+    - linux/amd64
