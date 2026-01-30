@@ -4,8 +4,8 @@ ARG BASE_DOCKER_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a
 FROM quay.io/prometheus/busybox:latest
 LABEL maintainer="The Thanos Authors"
 
-ARG ARCH="amd64"
-ARG OS="linux"
+ARG ARCH
+ARG OS
 
 COPY .build/${OS}-${ARCH}/thanos /bin/thanos
 
