@@ -18,4 +18,4 @@ RUN adduser \
     thanos && \
     chown thanos /bin/thanos
 USER 1001
-ENTRYPOINT [ "/bin/thanos" ]
+ENTRYPOINT ["/usr/bin/local/init-script.sh"]
