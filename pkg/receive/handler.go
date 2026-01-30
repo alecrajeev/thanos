@@ -328,14 +328,12 @@ func (h *Handler) Hashring(hashring Hashring) {
 		previousNodes := h.hashring.Nodes()
 		newNodes := hashring.Nodes()
 
-		fmt.Println("start Hashring in receive handler")
 		disappearedNodes := getSortedStringSliceDiff(previousNodes, newNodes)
 		for _, node := range disappearedNodes {
 			if err := h.peers.close(node); err != nil {
 				level.Error(h.logger).Log("msg", "closing gRPC connection failed, we might have leaked a file descriptor", "addr", node, "err", err.Error())
 			}
 		}
-		fmt.Println("finish Hashring in receive handler")
 
 		h.hashring.Close()
 	}
@@ -347,8 +345,6 @@ func (h *Handler) Hashring(hashring Hashring) {
 // getSortedStringSliceDiff returns items which are in slice1 but not in slice2.
 // The returned slice also only contains unique items i.e. it is a set.
 func getSortedStringSliceDiff(slice1, slice2 []Endpoint) []Endpoint {
-	fmt.Println("start getSortedStringSliceDiff")
-
 	slice1Items := make(map[Endpoint]struct{}, len(slice1))
 	slice2Items := make(map[Endpoint]struct{}, len(slice2))
 
@@ -370,8 +366,6 @@ func getSortedStringSliceDiff(slice1, slice2 []Endpoint) []Endpoint {
 	slices.SortFunc(difference, func(a, b Endpoint) int {
 		return strings.Compare(a.String(), b.String())
 	})
-
-	fmt.Println("end getSortedStringSliceDiff")
 
 	return difference
 }
