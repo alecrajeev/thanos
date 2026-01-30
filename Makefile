@@ -243,7 +243,7 @@ docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
 	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
-	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)-linux-$*"
 
 .PHONY: docs
 docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.
