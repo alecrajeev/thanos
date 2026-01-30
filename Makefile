@@ -158,7 +158,7 @@ ifeq ($(GIT_BRANCH), main)
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	# we only care about below two for the main branch
-	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64 -p linux/ppc64le
+	$(PROMU) crossbuild -v -p linux/arm64
 else
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
