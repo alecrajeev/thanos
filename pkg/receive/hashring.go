@@ -217,23 +217,13 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 			if _, ok := replicas[rep.endpointIndex]; ok {
 				continue
 			}
-			if s.preferSameZone {
-				// prefer replicas to be in the same availability zone
-				if s.az != rep.az {
-					continue
-				}
-			} else {
-				if len(azSpread) > 1 && azSpread[rep.az] > 0 && azSpread[rep.az] > sizeOfLeastOccupiedAZ(azSpread) {
-					// We want to ensure even AZ spread before we add more replicas within the same AZ
-					continue
-				}
+			if len(azSpread) > 1 && azSpread[rep.az] > 0 && azSpread[rep.az] > sizeOfLeastOccupiedAZ(azSpread) {
+				// We want to ensure even AZ spread before we add more replicas within the same AZ
+				continue
 			}
 			replicas[rep.endpointIndex] = struct{}{}
 			azSpread[rep.az]++
 			s.replicas = append(s.replicas, rep.endpointIndex)
-			fmt.Println("replicas start")
-			fmt.Println(s.replicas)
-			fmt.Println("replicas finish")
 		}
 	}
 }
