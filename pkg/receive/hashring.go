@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -140,9 +141,11 @@ func (p sections) Sort()              { sort.Sort(p) }
 
 // ketamaHashring represents a group of nodes handling write requests with consistent hashing.
 type ketamaHashring struct {
-	endpoints    []Endpoint
-	sections     sections
-	numEndpoints uint64
+	endpoints      []Endpoint
+	sections       sections
+	numEndpoints   uint64
+	localAZ        string
+	preferSameZone bool
 }
 
 func (s ketamaHashring) Close() {}
@@ -181,6 +184,49 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 		endpoints:    endpoints,
 		sections:     ringSections,
 		numEndpoints: uint64(len(endpoints)),
+	}, nil
+}
+
+func newKetamaHashringPreferSameZone(endpoints []Endpoint, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
+	numSections := len(endpoints) * sectionsPerNode
+
+	if len(endpoints) < int(replicationFactor) {
+		return nil, errors.New("ketama: amount of endpoints needs to be larger than replication factor")
+
+	}
+
+	// Get local AZ from environment variable.
+	localAZ := os.Getenv("THANOS_RECEIVE_AVAILABILITY_ZONE")
+
+	hash := xxhash.New()
+	availabilityZones := make(map[string]struct{})
+	ringSections := make(sections, 0, numSections)
+
+	for endpointIndex, endpoint := range endpoints {
+		availabilityZones[endpoint.AZ] = struct{}{}
+		for i := 1; i <= sectionsPerNode; i++ {
+			_, _ = hash.Write([]byte(endpoint.Address + ":" + strconv.Itoa(i)))
+			n := &section{
+				az:             endpoint.AZ,
+				endpointIndex:  uint64(endpointIndex),
+				hash:           hash.Sum64(),
+				replicas:       make([]uint64, 0, replicationFactor),
+				preferSameZone: endpoint.PreferSameZone,
+			}
+
+			ringSections = append(ringSections, n)
+			hash.Reset()
+		}
+	}
+	sort.Sort(ringSections)
+	calculateSectionReplicas(ringSections, replicationFactor, availabilityZones)
+
+	return &ketamaHashring{
+		endpoints:      endpoints,
+		sections:       ringSections,
+		numEndpoints:   uint64(len(endpoints)),
+		localAZ:        localAZ,
+		preferSameZone: true,
 	}, nil
 }
 
@@ -249,8 +295,34 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 		i = 0
 	}
 
-	endpointIndex := c.sections[i].replicas[n]
+	replicas := c.sections[i].replicas
+
+	// If preferSameZone is enabled and we have a local AZ, reorder replicas
+	// to prioritize endpoints in the same AZ.
+	if c.preferSameZone && c.localAZ != "" {
+		replicas = c.reorderReplicasByAZ(replicas)
+	}
+
+	endpointIndex := replicas[n]
 	return c.endpoints[endpointIndex], nil
+}
+
+// reorderReplicasByAZ reorders the given replica indices to prioritize
+// endpoints in the same AZ as the local receiver. Same-AZ replicas come first,
+// followed by other-AZ replicas, preserving relative order within each group.
+func (c ketamaHashring) reorderReplicasByAZ(replicas []uint64) []uint64 {
+	sameAZ := make([]uint64, 0, len(replicas))
+	otherAZ := make([]uint64, 0, len(replicas))
+
+	for _, endpointIndex := range replicas {
+		if c.endpoints[endpointIndex].AZ == c.localAZ {
+			sameAZ = append(sameAZ, endpointIndex)
+		} else {
+			otherAZ = append(otherAZ, endpointIndex)
+		}
+	}
+
+	return append(sameAZ, otherAZ...)
 }
 
 type tenantSet map[string]tenantMatcher
@@ -651,7 +723,7 @@ func (s *shuffleShardHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
-func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig, reg prometheus.Registerer) (Hashring, error) {
+func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig, reg prometheus.Registerer, preferSameZone bool) (Hashring, error) {
 	m := &multiHashring{
 		cache: make(map[string]Hashring),
 	}
@@ -663,7 +735,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		if h.Algorithm != "" {
 			activeAlgorithm = h.Algorithm
 		}
-		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, h.ShuffleShardingConfig, reg)
+		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, h.ShuffleShardingConfig, reg, preferSameZone)
 		if err != nil {
 			return nil, err
 		}
@@ -684,7 +756,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	return m, nil
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, shuffleShardingConfig ShuffleShardingConfig, reg prometheus.Registerer) (Hashring, error) {
+func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, shuffleShardingConfig ShuffleShardingConfig, reg prometheus.Registerer, preferSameZone bool) (Hashring, error) {
 
 	switch algorithm {
 	case AlgorithmHashmod:
@@ -697,17 +769,25 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 		}
 		return ringImpl, nil
 	case AlgorithmKetama:
-		ringImpl, err := newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
-		if err != nil {
-			return nil, err
-		}
-		if shuffleShardingConfig.ShardSize > 0 {
-			if shuffleShardingConfig.ShardSize > len(endpoints) {
-				return nil, fmt.Errorf("shard size %d is larger than number of nodes in hashring %s (%d)", shuffleShardingConfig.ShardSize, hashring, len(endpoints))
+		if preferSameZone {
+			ringImpl, err := newKetamaHashringPreferSameZone(endpoints, SectionsPerNode, replicationFactor)
+			if err != nil {
+				return nil, err
 			}
-			return newShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
+			return ringImpl, nil
+		} else {
+			ringImpl, err := newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+			if err != nil {
+				return nil, err
+			}
+			if shuffleShardingConfig.ShardSize > 0 {
+				if shuffleShardingConfig.ShardSize > len(endpoints) {
+					return nil, fmt.Errorf("shard size %d is larger than number of nodes in hashring %s (%d)", shuffleShardingConfig.ShardSize, hashring, len(endpoints))
+				}
+				return newShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
+			}
+			return ringImpl, nil
 		}
-		return ringImpl, nil
 	default:
 		l := log.NewNopLogger()
 		level.Warn(l).Log("msg", "Unrecognizable hashring algorithm. Fall back to hashmod algorithm.",
