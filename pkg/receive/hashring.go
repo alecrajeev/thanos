@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -251,7 +252,16 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 
 	var i uint64
 	i = uint64(sort.Search(len(c.sections), func(i int) bool {
-		return c.sections[i].hash >= v
+		if c.sections[i].preferSameZone {
+			az := os.Getenv("THANOS_RECEIVE_AVAILABILITY_ZONE")
+			if az != "" {
+				return c.sections[i].hash >= v && c.sections[i].az == az
+			} else {
+				return c.sections[i].hash >= v
+			}
+		} else {
+			return c.sections[i].hash >= v
+		}
 	}))
 
 	numSections := uint64(len(c.sections))
